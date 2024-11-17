@@ -6,7 +6,7 @@ use crate::fs::{FileSystem, ReadWriteSeek};
 use crate::io::{IoBase, Read, Seek, SeekFrom, Write};
 use crate::time::{Date, DateTime, TimeProvider};
 
-const MAX_FILE_SIZE: u32 = core::u32::MAX;
+const MAX_FILE_SIZE: u32 = u32::MAX;
 
 /// A FAT filesystem file object used for reading and writing data.
 ///
@@ -188,7 +188,7 @@ impl<'a, IO: ReadWriteSeek, TP, OCC> File<'a, IO, TP, OCC> {
     fn is_dir(&self) -> bool {
         match self.entry {
             Some(ref e) => e.inner().is_dir(),
-            None => false,
+            None => true, // root directory
         }
     }
 
@@ -213,6 +213,10 @@ impl<'a, IO: ReadWriteSeek, TP, OCC> File<'a, IO, TP, OCC> {
         let mut disk = self.fs.disk.borrow_mut();
         disk.flush()?;
         Ok(())
+    }
+
+    pub(crate) fn is_root_dir(&self) -> bool {
+        self.entry.is_none()
     }
 }
 

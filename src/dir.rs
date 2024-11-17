@@ -1,6 +1,5 @@
 #[cfg(all(not(feature = "std"), feature = "alloc", feature = "lfn"))]
 use alloc::vec::Vec;
-use core::char;
 use core::num;
 use core::str;
 #[cfg(feature = "lfn")]
@@ -37,6 +36,13 @@ impl<IO: ReadWriteSeek, TP, OCC> DirRawStream<'_, IO, TP, OCC> {
         match self {
             DirRawStream::File(file) => file.first_cluster(),
             DirRawStream::Root(_) => None,
+        }
+    }
+
+    pub(crate) fn is_root_dir(&self) -> bool {
+        match self {
+            DirRawStream::File(file) => file.is_root_dir(),
+            DirRawStream::Root(_) => true,
         }
     }
 }
@@ -305,8 +311,13 @@ impl<'a, IO: ReadWriteSeek, TP: TimeProvider, OCC: OemCpConverter> Dir<'a, IO, T
                 let sfn_entry = self.create_sfn_entry(dot_sfn, FileAttributes::DIRECTORY, entry.first_cluster());
                 dir.write_entry(".", sfn_entry)?;
                 let dotdot_sfn = ShortNameGenerator::generate_dotdot();
-                let sfn_entry =
-                    self.create_sfn_entry(dotdot_sfn, FileAttributes::DIRECTORY, self.stream.first_cluster());
+                // cluster of the root dir shall be set to 0 in directory entries.
+                let dotdot_cluster = if self.stream.is_root_dir() {
+                    None
+                } else {
+                    self.stream.first_cluster()
+                };
+                let sfn_entry = self.create_sfn_entry(dotdot_sfn, FileAttributes::DIRECTORY, dotdot_cluster);
                 dir.write_entry("..", sfn_entry)?;
                 Ok(dir)
             }
@@ -530,6 +541,12 @@ impl<'a, IO: ReadWriteSeek, TP: TimeProvider, OCC: OemCpConverter> Dir<'a, IO, T
         Ok((stream, start_pos))
     }
 
+    fn alloc_sfn_entry(&self) -> Result<(DirRawStream<'a, IO, TP, OCC>, u64), Error<IO::Error>> {
+        let mut stream = self.find_free_entries(1)?;
+        let start_pos = stream.seek(io::SeekFrom::Current(0))?;
+        Ok((stream, start_pos))
+    }
+
     fn write_entry(
         &self,
         name: &str,
@@ -540,8 +557,13 @@ impl<'a, IO: ReadWriteSeek, TP: TimeProvider, OCC: OemCpConverter> Dir<'a, IO, T
         validate_long_name(name)?;
         // convert long name to UTF-16
         let lfn_utf16 = Self::encode_lfn_utf16(name);
-        // write LFN entries
-        let (mut stream, start_pos) = self.alloc_and_write_lfn_entries(&lfn_utf16, raw_entry.name())?;
+        // write LFN entries, except for . and .., which need to be at
+        // the first two slots and don't need LFNs anyway
+        let (mut stream, start_pos) = if name == "." || name == ".." {
+            self.alloc_sfn_entry()?
+        } else {
+            self.alloc_and_write_lfn_entries(&lfn_utf16, raw_entry.name())?
+        };
         // write short name entry
         raw_entry.serialize(&mut stream)?;
         // Get position directory stream after entries were written
