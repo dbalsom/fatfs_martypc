@@ -239,7 +239,7 @@ impl BiosParameterBlock {
             );
             return Err(Error::CorruptedFileSystem);
         }
-        if (self.total_sectors_16 == 0) == (self.total_sectors_32 == 0) {
+        if (self.total_sectors_16 == 0) && (self.total_sectors_32 == 0) {
             error!("Invalid BPB (total_sectors_16 or total_sectors_32 should be non-zero)");
             return Err(Error::CorruptedFileSystem);
         }
