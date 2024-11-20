@@ -442,11 +442,10 @@ impl BootSector {
 
     pub(crate) fn validate<E: IoError>(&self) -> Result<(), Error<E>> {
         if self.boot_sig != [0x55, 0xAA] {
-            error!(
-                "Invalid boot sector signature: expected [0x55, 0xAA] but got {:?}",
+            warn!(
+                "No boot signature found: expected [0x55, 0xAA] but got {:?}",
                 self.boot_sig
             );
-            return Err(Error::CorruptedFileSystem);
         }
         if self.bootjmp[0] != 0xEB && self.bootjmp[0] != 0xE9 {
             warn!("Unknown opcode {:x} in bootjmp boot sector field", self.bootjmp[0]);
